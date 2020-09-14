@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"io"
 
+	"github.com/vorteil/vorteil/pkg/elog"
 	"github.com/vorteil/vorteil/pkg/ext"
 	"github.com/vorteil/vorteil/pkg/gcparchive"
 	"github.com/vorteil/vorteil/pkg/vcfg"
@@ -24,6 +25,7 @@ type BuildArgs struct {
 	Format        Format
 	SizeAlign     int64
 	KernelOptions KernelOptions
+	Logger        elog.Logger
 }
 
 func Build(ctx context.Context, w io.WriteSeeker, args *BuildArgs) error {
@@ -33,21 +35,34 @@ func Build(ctx context.Context, w io.WriteSeeker, args *BuildArgs) error {
 	case VMDKFormat:
 	case VMDKSparseFormat:
 	case VMDKStreamOptimizedFormat:
-	// case VHDFormat:
-	// case VHDFormat2:
-	// case XVAFormat
 	case GCPFArchiveFormat:
+	case XVAFormat:
+	case VHDFormat:
+	case VHDFixedFormat:
+	case VHDDynamicFormat:
 	default:
 		return fmt.Errorf("build function does not support this disk format: '%s'", args.Format)
 	}
+
+	log := args.Logger
 
 	vf := args.PackageReader.VCFG()
 	defer vf.Close()
 	cfg, err := vcfg.LoadFile(vf)
 	if err != nil {
+		log.Errorf("error: %v", err)
 		return err
 	}
 	vf.Close()
+
+	rawlog := args.Logger.Scoped("Compiling virtual disk contents")
+	defer rawlog.Finish(false)
+
+	var imglog elog.Logger
+	if args.Format != RAWFormat {
+		imglog = args.Logger.Scoped("Wrapping contents in virtual image file: " + string(args.Format))
+		defer imglog.Finish(false)
+	}
 
 	vimgBuilder, err := vimg.NewBuilder(ctx, &vimg.BuilderArgs{
 		Kernel: vimg.KernelOptions{
@@ -56,7 +71,8 @@ func Build(ctx context.Context, w io.WriteSeeker, args *BuildArgs) error {
 		FSCompiler: ext.NewCompiler(&ext.CompilerArgs{
 			FileTree: args.PackageReader.FS(),
 		}),
-		VCFG: cfg,
+		VCFG:   cfg,
+		Logger: rawlog,
 	})
 	if err != nil {
 		return err
@@ -68,7 +84,9 @@ func Build(ctx context.Context, w io.WriteSeeker, args *BuildArgs) error {
 		if size > int64(cfg.VM.DiskSize.Units(vcfg.Byte)) {
 			delta := vcfg.Bytes(size) - cfg.VM.DiskSize
 			delta.Align(vcfg.MiB)
-			return fmt.Errorf("specified disk size %s insufficient to contain disk contents", delta)
+			err = fmt.Errorf("specified disk size %s insufficient to contain disk contents", delta)
+			log.Errorf("error: %v", err)
+			return err
 		} else {
 			size = int64(cfg.VM.DiskSize.Units(vcfg.Byte))
 		}
@@ -91,6 +109,11 @@ func Build(ctx context.Context, w io.WriteSeeker, args *BuildArgs) error {
 	err = args.Format.build(ctx, w, vimgBuilder, cfg)
 	if err != nil {
 		return err
+	}
+
+	rawlog.Finish(true)
+	if imglog != nil {
+		imglog.Finish(true)
 	}
 
 	return nil

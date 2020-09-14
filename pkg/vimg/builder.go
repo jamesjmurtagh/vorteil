@@ -6,6 +6,7 @@ import (
 	"io"
 	"math/rand"
 
+	"github.com/vorteil/vorteil/pkg/elog"
 	"github.com/vorteil/vorteil/pkg/vcfg"
 	"github.com/vorteil/vorteil/pkg/vkern"
 )
@@ -32,9 +33,11 @@ type BuilderArgs struct {
 	Kernel     KernelOptions
 	FSCompiler FSCompiler
 	VCFG       *vcfg.VCFG
+	Logger     elog.Logger
 }
 
 type Builder struct {
+	logger elog.Logger
 
 	// The following variables need to be calculated in the NewBuilder step.
 	rng           io.Reader
@@ -68,60 +71,69 @@ type Builder struct {
 
 func NewBuilder(ctx context.Context, args *BuilderArgs) (*Builder, error) {
 
+	log := args.Logger.Scoped("Validating args & calculating minimum disk size")
+	defer log.Finish(false)
+
 	err := ctx.Err()
 	if err != nil {
+		log.Errorf("error: %v", err)
 		return nil, err
 	}
-
-	// TODO: build logs
 
 	b := new(Builder)
 	b.rng = rand.New(rand.NewSource(args.Seed))
 	b.fs = args.FSCompiler
 	b.vcfg = args.VCFG
 	b.kernelOptions = args.Kernel
+	b.logger = args.Logger
 
-	err = b.validateArgs(ctx)
+	err = b.validateArgs(ctx, log)
 	if err != nil {
 		return nil, err
 	}
 
-	err = b.calculateMinimumSize(ctx)
+	err = b.calculateMinimumSize(ctx, log)
 	if err != nil {
 		return nil, err
 	}
 
+	log.Finish(true)
 	return b, nil
 }
 
-func (b *Builder) validateArgs(ctx context.Context) error {
+func (b *Builder) validateArgs(ctx context.Context, log elog.Logger) error {
 
-	err := b.validateOSArgs(ctx)
+	err := b.validateOSArgs(ctx, log)
 	if err != nil {
+		log.Errorf("error: %v", err)
 		return err
 	}
 
 	err = b.validateRootArgs()
 	if err != nil {
+		log.Errorf("error: %v", err)
 		return err
 	}
 
 	return nil
 }
 
-func (b *Builder) calculateMinimumSize(ctx context.Context) error {
+func (b *Builder) calculateMinimumSize(ctx context.Context, log elog.Logger) error {
 
 	b.minSize = (3 + 2*GPTEntriesSectors) * SectorSize
 
-	err := b.calculateMinimumOSPartitionSize(ctx)
+	err := b.calculateMinimumOSPartitionSize(ctx, log)
 	if err != nil {
 		return err
 	}
 
 	err = b.calculateMinimumRootSize(ctx)
 	if err != nil {
+		log.Errorf("error: %v", err)
 		return err
 	}
+
+	log.Debugf("Minimum disk size: %v", vcfg.Bytes(b.minSize))
 
 	return nil
 }
@@ -145,15 +157,23 @@ func (b *Builder) MinimumSize() int64 {
 
 func (b *Builder) Prebuild(ctx context.Context, size int64) error {
 
+	log := b.logger.Scoped("Computing disk layout")
+	defer log.Finish(false)
+
 	err := ctx.Err()
 	if err != nil {
+		log.Errorf("error: %v", err)
 		return err
 	}
 
 	b.size = size
 
+	log.Infof("Image size: %v", vcfg.Bytes(b.size))
+
 	if size%SectorSize != 0 {
-		return errors.New("image size must be a multiple of the sector size")
+		err = errors.New("image size must be a multiple of the sector size (512 bytes)")
+		log.Errorf("error: %v", err)
+		return err
 	}
 
 	sectors := size / SectorSize
@@ -165,11 +185,13 @@ func (b *Builder) Prebuild(ctx context.Context, size int64) error {
 
 	err = b.prebuildOS(ctx)
 	if err != nil {
+		log.Errorf("error: %v", err)
 		return err
 	}
 
 	err = b.prebuildRoot(ctx)
 	if err != nil {
+		log.Errorf("error: %v", err)
 		return err
 	}
 
@@ -178,19 +200,25 @@ func (b *Builder) Prebuild(ctx context.Context, size int64) error {
 	// backtracking when writing.
 	err = b.generateGPTEntries()
 	if err != nil {
+		log.Errorf("error: %v", err)
 		return err
 	}
 
+	log.Finish(true)
 	return nil
 }
 
 func (b *Builder) Build(ctx context.Context, w io.WriteSeeker) error {
 
-	err := b.writePartitions(ctx, w)
+	log := b.logger.Scoped("Writing raw image")
+	defer log.Finish(false)
+
+	err := b.writePartitions(ctx, w, log)
 	if err != nil {
 		return err
 	}
 
+	log.Finish(true)
 	return nil
 
 }

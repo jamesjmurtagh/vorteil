@@ -502,7 +502,7 @@ var sysctlFlag = stringSliceFlag{
 			x := strings.Split(s, "=")
 
 			if len(x) < 2 {
-				log.Warn("invalid sysctl tuple '%s'", s)
+				log.Warnf("invalid sysctl tuple '%s'", s)
 			}
 
 			if overrideVCFG.Sysctl == nil {

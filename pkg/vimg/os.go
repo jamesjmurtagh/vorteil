@@ -11,6 +11,7 @@ import (
 	"strings"
 
 	"github.com/mattn/go-shellwords"
+	"github.com/vorteil/vorteil/pkg/elog"
 	"github.com/vorteil/vorteil/pkg/vkern"
 )
 
@@ -33,14 +34,17 @@ func (b *Builder) prebuildOS(ctx context.Context) error {
 	return nil
 }
 
-func (b *Builder) loadKernel(ctx context.Context) error {
+func (b *Builder) loadKernel(ctx context.Context, log elog.Logger) error {
 
 	err := ctx.Err()
 	if err != nil {
+		log.Errorf("error: %v", err)
 		return err
 	}
 
+	klog := log.Scoped("Getting kernel " + string(b.kernel))
 	b.kernelBundle, err = GetKernel(ctx, b.kernel)
+	klog.Finish(err == nil)
 	if err != nil {
 		return err
 	}
@@ -49,20 +53,22 @@ func (b *Builder) loadKernel(ctx context.Context) error {
 
 }
 
-func (b *Builder) calculateMinimumOSPartitionSize(ctx context.Context) error {
+func (b *Builder) calculateMinimumOSPartitionSize(ctx context.Context, log elog.Logger) error {
 
 	err := ctx.Err()
 	if err != nil {
+		log.Errorf("error: %v", err)
 		return err
 	}
 
-	err = b.loadKernel(ctx)
+	err = b.loadKernel(ctx, log)
 	if err != nil {
 		return err
 	}
 
 	err = b.generateConfig()
 	if err != nil {
+		log.Errorf("error: %v", err)
 		return err
 	}
 
@@ -226,7 +232,7 @@ func (b *Builder) osRegionIsHole(begin, size int64) bool {
 	return false
 }
 
-func (b *Builder) validateOSArgs(ctx context.Context) error {
+func (b *Builder) validateOSArgs(ctx context.Context, log elog.Logger) error {
 
 	b.linuxArgs = b.vcfg.System.KernelArgs
 	b.kernelTags = []string{}
@@ -268,15 +274,21 @@ func (b *Builder) validateOSArgs(ctx context.Context) error {
 	b.kernel, err = vkern.Parse(b.vcfg.VM.Kernel)
 	if err != nil {
 		if err == vkern.ErrInvalidCalVer {
+			klog := log.Scoped("Resolving latest kernel")
 			b.kernel, err = GetLatestKernel(ctx)
+			klog.Finish(err == nil)
 		}
 		if err != nil {
+			log.Errorf("error: %v", err)
 			return err
 		}
 	}
 
+	log.Infof("Kernel: %s", b.kernel)
+
 	err = b.processLinuxArgs()
 	if err != nil {
+		log.Errorf("error: %v", err)
 		return err
 	}
 

@@ -7,6 +7,7 @@ import (
 	"hash/crc32"
 	"io"
 
+	"github.com/vorteil/vorteil/pkg/elog"
 	"github.com/vorteil/vorteil/pkg/vio"
 )
 
@@ -44,46 +45,56 @@ var (
 	Part2UUIDString = "4048447D-C09D-D111-B245-5FFDCE74FAD2"
 )
 
-func (b *Builder) writePartitions(ctx context.Context, w io.WriteSeeker) error {
+func (b *Builder) writePartitions(ctx context.Context, w io.WriteSeeker, log elog.Logger) error {
 
 	var err error
 	b.diskUID, err = b.generateUID()
 	if err != nil {
+		log.Errorf("error: %v", err)
 		return err
 	}
 
 	err = b.writeMBR(ctx, w)
 	if err != nil {
+		log.Errorf("error: %v", err)
 		return err
 	}
 
 	err = b.writePrimaryGPTHeader(ctx, w)
 	if err != nil {
+		log.Errorf("error: %v", err)
 		return err
 	}
 
 	err = b.writePrimaryGPTEntries(ctx, w)
 	if err != nil {
+		log.Errorf("error: %v", err)
 		return err
 	}
 
+	log.Infof("Writing OS partition")
 	err = b.writeOS(ctx, w)
 	if err != nil {
+		log.Errorf("error: %v", err)
 		return err
 	}
 
+	log.Infof("Writing root partition")
 	err = b.writeRoot(ctx, w)
 	if err != nil {
+		log.Errorf("error: %v", err)
 		return err
 	}
 
 	err = b.writeSecondaryGPTEntries(ctx, w)
 	if err != nil {
+		log.Errorf("error: %v", err)
 		return err
 	}
 
 	err = b.writeSecondaryGPTHeader(ctx, w)
 	if err != nil {
+		log.Errorf("error: %v", err)
 		return err
 	}
 

@@ -9,6 +9,7 @@ import (
 	"path/filepath"
 	"strings"
 
+	"github.com/cirruslabs/echelon/renderers"
 	"github.com/fatih/color"
 	"github.com/inconshreveable/log15"
 	"github.com/mattn/go-colorable"
@@ -17,6 +18,7 @@ import (
 	"github.com/sisatech/tablewriter"
 	"github.com/sisatech/toml"
 	"github.com/spf13/pflag"
+	"github.com/vorteil/vorteil/pkg/elog"
 	"github.com/vorteil/vorteil/pkg/vcfg"
 	"github.com/vorteil/vorteil/pkg/vdisk"
 	"github.com/vorteil/vorteil/pkg/vimg"
@@ -26,18 +28,25 @@ import (
 	"github.com/vorteil/vorteil/pkg/vproj"
 )
 
-var log = log15.Root()
+var renderer *renderers.InteractiveRenderer
+var log elog.Logger
 
 func main() {
 
-	commandInit()
+	renderer = renderers.NewInteractiveRenderer(os.Stdout, nil)
+	go renderer.StartDrawing()
+	defer renderer.StopDrawing()
+	defer func() {
+		if log != nil {
+			log.Finish(false)
+		}
+	}()
 
-	log = log15.New()
-	log.SetHandler(stderrHandler)
+	commandInit()
 
 	err := rootCmd.Execute()
 	if err != nil {
-		log.Error(err.Error())
+		fmt.Fprintf(os.Stderr, "%v\n", err.Error())
 		os.Exit(1)
 	}
 }
@@ -263,7 +272,7 @@ func initKernels() error {
 
 }
 
-func getPackageBuilder(argName, src string) (vpkg.Builder, error) {
+func getPackageBuilder(argName, src string, log elog.Logger) (vpkg.Builder, error) {
 
 	var pkgr vpkg.Reader
 	var pkgb vpkg.Builder
@@ -277,6 +286,8 @@ func getPackageBuilder(argName, src string) (vpkg.Builder, error) {
 				return nil, err
 			}
 		} else {
+			log.Infof("Loading package file.")
+
 			pkgr, err = vpkg.Load(f)
 			if err != nil {
 				f.Close()
@@ -289,6 +300,7 @@ func getPackageBuilder(argName, src string) (vpkg.Builder, error) {
 				f.Close()
 				return nil, err
 			}
+
 			return pkgb, nil
 		}
 	}
@@ -302,6 +314,8 @@ func getPackageBuilder(argName, src string) (vpkg.Builder, error) {
 			return nil, err
 		}
 	} else {
+		log.Infof("Loading project directory.")
+
 		ptgt, err = proj.Target(target)
 		if err != nil {
 			return nil, err
@@ -319,6 +333,95 @@ func getPackageBuilder(argName, src string) (vpkg.Builder, error) {
 	// TODO: check for vrepo strings
 
 	return nil, fmt.Errorf("failed to resolve %s '%s'", argName, src)
+}
+
+func buildImage(pkgBuilder vpkg.Builder, outputPath string, format vdisk.Format, log elog.Logger) (vio.File, *vcfg.VCFG, error) {
+	err := modifyPackageBuilder(pkgBuilder)
+	if err != nil {
+		log.Errorf("error: %v", err)
+		return nil, nil, err
+	}
+
+	pkgReader, err := vpkg.ReaderFromBuilder(pkgBuilder)
+	if err != nil {
+		log.Errorf("error: %v", err)
+		return nil, nil, err
+	}
+	defer pkgReader.Close()
+
+	pkgReader, err = vpkg.PeekVCFG(pkgReader)
+	if err != nil {
+		log.Errorf("error: %v", err)
+		return nil, nil, err
+	}
+
+	cfgf := pkgReader.VCFG()
+	cfg, err := vcfg.LoadFile(cfgf)
+	if err != nil {
+		log.Errorf("error: %v", err)
+		return nil, nil, err
+	}
+
+	err = initKernels()
+	if err != nil {
+		log.Errorf("error: %v", err)
+		return nil, nil, err
+	}
+
+	var f *os.File
+	if outputPath == "" {
+		f, err = ioutil.TempFile(os.TempDir(), "vorteil.disk")
+		if err != nil {
+			log.Errorf("error: %v", err)
+			return nil, nil, err
+		}
+		defer f.Close()
+	} else {
+		f, err = os.Create(outputPath)
+		if err != nil {
+			log.Errorf("error: %v", err)
+			return nil, nil, err
+		}
+		defer f.Close()
+	}
+
+	defer func() {
+		if err != nil {
+			_ = os.Remove(f.Name())
+		}
+	}()
+
+	err = vdisk.Build(context.Background(), f, &vdisk.BuildArgs{
+		PackageReader: pkgReader,
+		Format:        format,
+		KernelOptions: vdisk.KernelOptions{
+			Shell: flagShell,
+		},
+		Logger: log,
+	})
+	if err != nil {
+		return nil, nil, err
+	}
+
+	err = f.Close()
+	if err != nil {
+		log.Errorf("error: %v", err)
+		return nil, nil, err
+	}
+
+	err = pkgReader.Close()
+	if err != nil {
+		log.Errorf("error: %v", err)
+		return nil, nil, err
+	}
+
+	vf, err := vio.Open(f.Name())
+	if err != nil {
+		log.Errorf("error: %v", err)
+		return nil, nil, err
+	}
+
+	return vf, cfg, nil
 }
 
 var (

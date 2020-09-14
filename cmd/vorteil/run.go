@@ -16,17 +16,11 @@ import (
 	"github.com/vorteil/vorteil/pkg/virtualizers/qemu"
 )
 
-func runQEMU(diskpath string, cfg *vcfg.VCFG) error {
+func runQEMU(f vio.File, cfg *vcfg.VCFG) error {
 
 	if !qemu.Allocator.IsAvailable() {
 		return errors.New("qemu not found installed on system")
 	}
-
-	f, err := vio.Open(diskpath)
-	if err != nil {
-		return err
-	}
-	defer f.Close()
 
 	alloc := qemu.Allocator
 	virt := alloc.Alloc()
@@ -35,7 +29,7 @@ func runQEMU(diskpath string, cfg *vcfg.VCFG) error {
 	config := qemu.Config{
 		Headless: true,
 	}
-	err = virt.Initialize(config.Marshal())
+	err := virt.Initialize(config.Marshal())
 	if err != nil {
 		return err
 	}

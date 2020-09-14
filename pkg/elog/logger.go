@@ -2,6 +2,7 @@ package elog
 
 import (
 	"encoding/json"
+	"time"
 
 	"github.com/cirruslabs/echelon"
 )
@@ -35,8 +36,9 @@ type EchelonLogger struct {
 	finished bool
 }
 
-func NewEchelonLogger() *EchelonLogger {
+func NewEchelonLogger(level LogLevel, renderer echelon.LogRendered) *EchelonLogger {
 	return &EchelonLogger{
+		Logger: echelon.NewLogger(echelon.LogLevel(level), renderer),
 		status: "{}",
 	}
 }
@@ -61,6 +63,7 @@ func (elog *EchelonLogger) Finish(success bool) {
 	}
 	elog.finished = true
 	elog.Logger.Finish(success)
+	time.Sleep(time.Millisecond * 50)
 }
 
 func (elog *EchelonLogger) SetStatus(key string, val interface{}) {

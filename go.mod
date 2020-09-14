@@ -28,6 +28,7 @@ require (
 	github.com/mitchellh/go-homedir v1.1.0
 	github.com/natefinch/npipe v0.0.0-20160621034901-c1b8fa8bdcce // indirect
 	github.com/novln/docker-parser v1.0.0
+	github.com/prometheus/common v0.4.1
 	github.com/sisatech/goapi v0.0.0-20200218003521-8dcdab8c7a5e
 	github.com/sisatech/tablewriter v0.0.0-20161130023222-815eceb01ee6
 	github.com/sisatech/toml v0.0.0-20181010232116-ca247dd35773
