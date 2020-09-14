@@ -180,7 +180,6 @@ Supported disk formats include:
 			blog.Errorf("error: %v", err)
 			return nil
 		}
-		defer os.Remove(f.Name())
 		defer f.Close()
 
 		blog.Finish(true)
