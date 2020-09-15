@@ -30,12 +30,15 @@ type BuildArgs struct {
 
 func Build(ctx context.Context, w io.WriteSeeker, args *BuildArgs) error {
 
+	defaultMTU := uint(1500)
+
 	switch args.Format {
 	case RAWFormat:
 	case VMDKFormat:
 	case VMDKSparseFormat:
 	case VMDKStreamOptimizedFormat:
 	case GCPFArchiveFormat:
+		defaultMTU = 1460
 	case XVAFormat:
 	case VHDFormat:
 	case VHDFixedFormat:
@@ -78,6 +81,8 @@ func Build(ctx context.Context, w io.WriteSeeker, args *BuildArgs) error {
 		return err
 	}
 	defer vimgBuilder.Close()
+
+	vimgBuilder.SetDefaultMTU(defaultMTU)
 
 	size := vimgBuilder.MinimumSize()
 	if !cfg.VM.DiskSize.IsDelta() {
