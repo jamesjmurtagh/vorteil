@@ -1,3 +1,7 @@
+/**
+ * SPDX-License-Identifier: Apache-2.0
+ * Copyright 2020 vorteil.io Pty Ltd
+ */
 package hyperv
 
 import (
@@ -8,9 +12,9 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/vorteil/vorteil/pkg/vcfg"
 	"github.com/vorteil/vorteil/pkg/virtualizers"
 	logger "github.com/vorteil/vorteil/pkg/virtualizers/logging"
-	"github.com/vorteil/vorteil/pkg/vcfg"
 )
 
 var codeBlockToLookIP = `
