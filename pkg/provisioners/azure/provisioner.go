@@ -156,6 +156,8 @@ func (p *Provisioner) SizeAlign() vcfg.Bytes {
 }
 
 func (p *Provisioner) Provision(args *provisioners.ProvisionArgs) error {
+	azureSpinner := args.Logger.NewProgress("Provisioning Image To Azure...", "", 0)
+	defer azureSpinner.Finish(true)
 
 	creds, err := azblob.NewSharedKeyCredential(p.cfg.StorageAccountName, p.cfg.StorageAccountKey)
 	if err != nil {
@@ -345,6 +347,7 @@ func (p *Provisioner) Provision(args *provisioners.ProvisionArgs) error {
 		return err
 	}
 
+	azureSpinner.Finish(true)
 	args.Logger.Printf("Done!")
 
 	return nil

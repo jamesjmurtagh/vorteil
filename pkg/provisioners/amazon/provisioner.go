@@ -119,8 +119,8 @@ func (p *Provisioner) Initialize(data []byte) error {
 
 func (p *Provisioner) Provision(args *provisioners.ProvisionArgs) error {
 	var err error
-	pendingSpinner := args.Logger.NewProgress("Preparing Instance...", "", 0)
-	defer pendingSpinner.Finish(true)
+	awsSpinner := args.Logger.NewProgress("Provisioning Image To AWS...", "", 0)
+	defer awsSpinner.Finish(true)
 
 	args.Logger.Infof("Creating new session...")
 	sess, err := session.NewSession(&aws.Config{
@@ -280,7 +280,6 @@ func (p *Provisioner) Provision(args *provisioners.ProvisionArgs) error {
 			args.Logger.Infof("Instance status: pending.")
 			continue
 		case 16:
-			pendingSpinner.Finish(true)
 			args.Logger.Infof("Instance status: running.")
 			if description == nil || len(description.Reservations) == 0 ||
 				len(description.Reservations[0].Instances) == 0 ||
@@ -370,8 +369,6 @@ func (p *Provisioner) Provision(args *provisioners.ProvisionArgs) error {
 	}
 
 	args.Logger.Infof("Instance is live and ready for payload.")
-	dispatchSpinner := args.Logger.NewProgress("Uploading Image... ", "", 0)
-	defer dispatchSpinner.Finish(true)
 
 	pr, pw := io.Pipe()
 	defer pr.Close()
@@ -401,7 +398,6 @@ func (p *Provisioner) Provision(args *provisioners.ProvisionArgs) error {
 	}
 	defer resp.Body.Close()
 
-	dispatchSpinner.Finish(true)
 	args.Logger.Infof("Payload dispatched.")
 	checksum := hex.EncodeToString(hasher.Sum(nil))
 	args.Logger.Infof("Our checksum: %s\n", checksum)
@@ -416,9 +412,6 @@ func (p *Provisioner) Provision(args *provisioners.ProvisionArgs) error {
 	}
 
 	args.Logger.Infof("Server checksum: %s\n", data)
-
-	stoppingSpinner := args.Logger.NewProgress("Stopping Instance...", "", 0)
-	defer stoppingSpinner.Finish(true)
 
 	for {
 		time.Sleep(pollrate)
@@ -462,7 +455,6 @@ func (p *Provisioner) Provision(args *provisioners.ProvisionArgs) error {
 		break
 	}
 
-	stoppingSpinner.Finish(true)
 	args.Logger.Infof("Instance has stopped.")
 
 	// make AMI
@@ -524,6 +516,7 @@ func (p *Provisioner) Provision(args *provisioners.ProvisionArgs) error {
 		}
 	}
 
+	awsSpinner.Finish(true)
 	args.Logger.Printf("Provisioned AMI: %s\n", *img.ImageId)
 	successful = true
 	amiID = *img.ImageId

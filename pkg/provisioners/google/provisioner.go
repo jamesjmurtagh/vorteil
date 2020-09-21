@@ -124,6 +124,8 @@ func (p *Provisioner) init() error {
 }
 
 func (p *Provisioner) Provision(args *provisioners.ProvisionArgs) error {
+	googleSpinner := args.Logger.NewProgress("Provisioning Image To GCP...", "", 0)
+	defer googleSpinner.Finish(true)
 
 	key, err := base64.StdEncoding.DecodeString(p.cfg.Key)
 	if err != nil {
@@ -271,7 +273,8 @@ func (p *Provisioner) Provision(args *provisioners.ProvisionArgs) error {
 		}
 
 		if op.Status == "DONE" {
-			args.Logger.Infof(" done.")
+			googleSpinner.Finish(true)
+			args.Logger.Printf("Done!")
 			break
 		}
 
@@ -281,6 +284,8 @@ func (p *Provisioner) Provision(args *provisioners.ProvisionArgs) error {
 	if pollTimeout >= 120 {
 		return fmt.Errorf("timed out waiting for image creation")
 	}
+
+	googleSpinner.Finish(true)
 
 	return nil
 }
